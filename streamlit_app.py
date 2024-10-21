@@ -1,28 +1,12 @@
 import streamlit as st
-st.title("내가 만든 앱")
-markdown_text = """
-# This is a Header
-## This is a Subheader
-You can write normal text here.
-* This is a bullet point
-* Another bullet point
-1. Numbered list item 1
-2. Numbered list item 2
-**Bold text** and *italic text*
-[This is a link](https://www.streamlit.io)
-Here's a code block:
-```python
-def hello_world():
- print("Hello, World!")
-```
-And here's a table:
-| Column 1 | Column 2 |
-|----------|----------|
-| Row 1 | Value 1 |
-| Row 2 | Value 2 |
-> This is a blockquote
----
-![Cute Cat](https://upload.wikimedia.org/wikipedia/commons/4/4d/Cat_November_2010-1a.jpg)
----
-"""
-st.markdown(markdown_text)
+import pandas as pd # pandas는 데이터 조작과 분석을 위한 라이브러리입니다
+# CSV 파일에서 데이터를 로드합니다.
+df = pd.read_csv('movies_2024.csv')
+# 언어별 영화 수를 계산합니다
+language_data = df['original_language'].value_counts()
+# Streamlit 앱 제목
+st.title('Movie Language Distribution')
+# 데이터 출력
+language_data
+# 막대 차트 생성 및 표시
+st.bar_chart(language_data)
