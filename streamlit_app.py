@@ -198,6 +198,11 @@ def main():
         'Commit Count (from HEAD to HEAD~n)',
         ('1', '2', '3', '4', '5', '6', '7', '8', '9', '10')
     )
+
+    if st.sidebar.button('SLACK 전송'):
+        st.sidebar.write('SLACK 전송 버튼 클릭됨')
+    if st.sidebar.button('TELEGRAM 전송'):
+        st.sidebar.write('TELEGRAM 전송 버튼 클릭됨')
     
     if not openai_api_key:
         st.warning('API Key를 입력해주세요.')
