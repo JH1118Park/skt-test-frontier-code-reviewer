@@ -1,5 +1,9 @@
 import streamlit as st
 from openai import OpenAI
+import sys
+
+# UTF-8 인코딩 설정
+sys.stdout.reconfigure(encoding='utf-8')
 
 # Streamlit UI 구성
 def main():
