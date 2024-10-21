@@ -1,12 +1,42 @@
 import streamlit as st
-import pandas as pd # pandas는 데이터 조작과 분석을 위한 라이브러리입니다
-# CSV 파일에서 데이터를 로드합니다.
-df = pd.read_csv('movies_2024.csv')
-# 언어별 영화 수를 계산합니다
-language_data = df['original_language'].value_counts()
-# Streamlit 앱 제목
-st.title('Movie Language Distribution')
-# 데이터 출력
-language_data
-# 막대 차트 생성 및 표시
-st.bar_chart(language_data)
+from openai import OpenAI
+
+# Streamlit UI 구성
+def main():
+    st.title('Langchain과 GPT-4o-mini를 활용한 텍스트 요약 앱')
+    
+    # OpenAI API 키 입력란 추가
+    openai_api_key = st.sidebar.text_input('OpenAI API Key', type='password')
+    
+    if not openai_api_key:
+        st.warning('API Key를 입력해주세요.')
+        return
+    
+    # OpenAI API 키 설정
+    #openai.api_key = openai_api_key
+
+    client = OpenAI(api_key=openai_api_key)  # OpenAI 라이브러리 임포트
+
+    # 사용자 입력 텍스트
+    input_text = st.text_area("요약하고 싶은 텍스트를 입력하세요.")
+
+    if st.button('요약하기') and input_text:
+        # 텍스트 요약 실행
+        with st.spinner('요약 중입니다...'):
+            try:
+                response = client.chat.completions.create(
+                    model="gpt-4o",
+                    messages=[
+                        {"role": "user", "content": f"다음 텍스트를 요약해주세요:\n{input_text}"}
+                    ],
+                    max_tokens=150,
+                    temperature=0.7
+                )
+                summary = response.choices[0].message.content.strip()
+                st.success('요약이 완료되었습니다!')
+                st.text_area('요약 결과', value=summary, height=200)
+            except Exception as e:
+                st.error(f'요약 중 오류가 발생했습니다: {str(e)}')
+
+if __name__ == "__main__":
+    main()
