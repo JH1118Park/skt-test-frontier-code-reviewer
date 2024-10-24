@@ -217,6 +217,8 @@ def summarize_diff_by_file(diff, client):
             summarized_diffs.append(f"------------------------------------------------------------------------------------------------------------------------------------------------------\n")
             summarized_diffs.append(f"Summary for file:\n{summary}\n")
 
+            sendto_webhook(diffs, summary)
+
         except Exception as e:
             st.warning(f"An error occurred during summarization: {e}")
             summarized_diffs.append("Error during summarization.")
@@ -230,6 +232,36 @@ def print_diff(diff):
     for line in lines:
         summarized_diffs.append(line)
     return "\n".join(summarized_diffs)
+
+def sendto_webhook(diff, summary):
+    # 파일에서 데이터를 읽기
+    # file_path = '/Users/1111792/Documents/log_mo.txt'  # 출력 파일 경로
+    # with open(file_path, 'r') as file:
+    # output_data = file.read()
+
+    # Make Webhook URL
+    webhook_url = "https://hook.us2.make.com/t7urq2yybrhc57fcd6ccbwzbbxujr3d7"
+
+    # 전송할 데이터 (JSON 형태로 설정)
+    payload = {
+        "diff": diff,
+        "summary": summary
+    }
+
+    # 요청 헤더 설정
+    headers = {
+        "Content-Type": "application/json"
+    }
+
+    # POST 요청 전송
+    response = requests.post(webhook_url, json=payload, headers=headers)
+
+    # 응답 확인
+    if response.status_code == 200:
+        st.warning("데이터가 성공적으로 전송되었습니다.")
+    else:
+        st.warning(f"오류 발생: {response.status_code}")
+        st.warning(response.text)
 
 # Streamlit UI 구성
 def main():
@@ -293,6 +325,7 @@ def main():
     diff = get_last_commit_diff(gitlab_url, gitlab_token, project_path, branch_selection, commit_diff_count)
     if diff:
         summary = summarize_diff_by_file(diff, client)
+        # sendto_webhook(summary)
         # if summary:
         #     st.text_area('요약 결과', value=summary, height=5000)
         # else:
