@@ -1,8 +1,10 @@
+import json
 import streamlit as st
 from openai import OpenAI
 import sys
 import subprocess
 import os
+import requests
 
 # UTF-8 인코딩 설정
 sys.stdout.reconfigure(encoding='utf-8')
@@ -10,33 +12,81 @@ sys.stdout.reconfigure(encoding='utf-8')
 # 화면 레이아웃 설정
 st.set_page_config(layout="wide")
 
+def get_gitlab_branches(repo_url):
+    result = subprocess.run(
+        ['git', 'ls-remote', '--heads', repo_url],
+        capture_output=True,
+        text=True
+    )
+    if result.returncode == 0:
+        lines = result.stdout.strip().split('\n')
+        branches = [line.split('/')[-1] for line in lines]
+        return branches
+    else:
+        print("Error:", result.stderr)
+        return []
+
 # 특정 경로의 마지막 커밋의 diff 가져오기
-def get_last_commit_diff(repo_path, branch_name, commit_diff_count):
-    try:
-        # 작업 디렉토리를 지정한 경로로 변경
-        os.chdir(repo_path)
+def get_last_commit_diff(gitlab_url, gitlab_token, project_path, branch_selection, commit_diff_count):
+    # GitLab 인스턴스 URL 및 개인 액세스 토큰 설정
+    # GITLAB_URL = "https://gitlab.tde.sktelecom.com"
+    # PRIVATE_TOKEN = "tde2-N35zS8ZvYio_KD3shyDa"  # 개인 액세스 토큰으로 교체하세요
+    # PROJECT_PATH = "CRD/sdk/engine/nrtc_media_engine"  # 프로젝트 경로
 
-        # 브랜치로 체크아웃
-        subprocess.run(["git", "checkout", branch_name], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    # GitLab 프로젝트 ID 가져오기
+    response = requests.get(
+        f"{gitlab_url}/api/v4/projects",
+        headers={"PRIVATE-TOKEN": gitlab_token},
+        params={"search": project_path.split('/')[-1]}
+    )
 
-        # 브랜치로 Pull
-        subprocess.run(["git", "pull"], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    project = next((p for p in response.json() if p['path_with_namespace'] == project_path), None)
+    if not project:
+        raise ValueError("프로젝트를 찾을 수 없습니다.")
 
-        # git diff 명령 실행 (HEAD~1과 HEAD 사이의 diff)
-        result = subprocess.run(
-            ["git", "diff", f"{branch_name}~{commit_diff_count}", branch_name],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,  # 에러 출력 suppressed
-            text=True,
-            check=True
-        )
-        return result.stdout if result.stdout else None
-    except subprocess.CalledProcessError as e:
-        st.warning(f"An error occurred: {e.stderr}")
-        return None
-    except FileNotFoundError:
-        st.warning(f"The path {repo_path} does not exist.")
-        return None
+    project_id = project['id']
+
+    # Diff 정보 가져오기
+    response = requests.get(
+        f"{gitlab_url}/api/v4/projects/{project_id}/repository/compare",
+        headers={"PRIVATE-TOKEN": gitlab_token},
+        params={"from": f"HEAD~{commit_diff_count}", "to": "HEAD"}
+    )
+
+    if response.status_code == 200:
+        diff_data = response.json().get("diffs", [])
+        # for diff in diff_data:
+        #     st.warning(f"파일: {diff['new_path']}")
+        #     st.warning(diff['diff'])
+    else:
+        st.warning(f"Diff를 가져오는 데 실패했습니다. 상태 코드: {response.status_code}")
+        
+    return diff_data
+    # try:
+    #     # 작업 디렉토리를 지정한 경로로 변경
+    #     os.chdir(repo_path)
+
+    #     # 브랜치로 체크아웃
+    #     subprocess.run(["git", "checkout", branch_name], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+    #     # 브랜치로 Pull
+    #     subprocess.run(["git", "pull"], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+    #     # git diff 명령 실행 (HEAD~1과 HEAD 사이의 diff)
+    #     result = subprocess.run(
+    #         ["git", "diff", f"{branch_name}~{commit_diff_count}", branch_name],
+    #         stdout=subprocess.PIPE,
+    #         stderr=subprocess.DEVNULL,  # 에러 출력 suppressed
+    #         text=True,
+    #         check=True
+    #     )
+    #     return result.stdout if result.stdout else None
+    # except subprocess.CalledProcessError as e:
+    #     st.warning(f"An error occurred: {e.stderr}")
+    #     return None
+    # except FileNotFoundError:
+    #     st.warning(f"The path {repo_path} does not exist.")
+    #     return None
 
 # 파일별 diff를 나누는 함수
 def split_diff_by_file(diff):
@@ -45,10 +95,10 @@ def split_diff_by_file(diff):
 
 # 파일별 diff를 요약하는 함수
 def summarize_diff_by_file(diff, client):
-    files_diff = split_diff_by_file(diff)
+    # files_diff = split_diff_by_file(diff)
     summarized_diffs = []
 
-    for file_diff in files_diff:
+    for file_diff in diff:
         #st.warning(file_diff)
         try:
             response = client.chat.completions.create(
@@ -141,16 +191,18 @@ def summarize_diff_by_file(diff, client):
                 max_tokens=1000
             )
             summary = response.choices[0].message.content.strip()
-            summarized_diffs.append(f"******************************************************************************************************************************************************\n")
-            summarized_diffs.append(f"Diff for file:\n{file_diff}\n")
-            summarized_diffs.append(f"------------------------------------------------------------------------------------------------------------------------------------------------------\n")
-            summarized_diffs.append(f"Summary for file:\n{summary}\n")
+
 
             col1, col2 = st.columns(2)
 
             if file_diff:
+                # diff 내용만 가져오기
+                diff_content = file_diff['diff']
+
+                # 함수 호출하여 diff 내용 출력
+                diffs = print_diff(diff_content)
                 with col1:
-                    st.text_area('**수정 파일**',value=file_diff, height=500)
+                    st.text_area('**수정 파일**',value=diffs, height=500)
             else:
                 st.warning("Failed to get the diff.")
 
@@ -160,10 +212,23 @@ def summarize_diff_by_file(diff, client):
             else:
                 st.warning("Failed to summarize the diff.")
 
+            summarized_diffs.append(f"******************************************************************************************************************************************************\n")
+            summarized_diffs.append(f"Diff for file:\n{diffs}\n")
+            summarized_diffs.append(f"------------------------------------------------------------------------------------------------------------------------------------------------------\n")
+            summarized_diffs.append(f"Summary for file:\n{summary}\n")
+
         except Exception as e:
             st.warning(f"An error occurred during summarization: {e}")
             summarized_diffs.append("Error during summarization.")
 
+    return "\n".join(summarized_diffs)
+
+# diff 내용을 보기 좋게 출력하는 함수
+def print_diff(diff):
+    summarized_diffs = []
+    lines = diff.split("\\n")
+    for line in lines:
+        summarized_diffs.append(line)
     return "\n".join(summarized_diffs)
 
 # Streamlit UI 구성
@@ -177,20 +242,30 @@ def main():
     """,
     unsafe_allow_html=True
     )
+
+    gitlab_url = "https://gitlab.tde.sktelecom.com"
     
     # OpenAI API 키 입력란 추가
     openai_api_key = st.sidebar.text_input('OpenAI API Key', type='password')
 
+    # Gitlab 키 입력란 추가
+    gitlab_token = st.sidebar.text_input('Gitlab Token', type='password')
+
     # 저장소 선택 추가
-    repo_selection = st.sidebar.selectbox(
+    project_path = st.sidebar.selectbox(
         '저장소를 선택하세요',
-        ('nrtc_media_engine', 'nrtc_media_app', 'nrtc_media_sdk')
+        ('CRD/sdk/engine/nrtc_media_engine', 'CRD/sdk/android/nrtc_sdk_android', 'CRD/app/nrtc_sample_android', 'CRD/app/nrtc_sample_ios', 'CRD/sdk/engine/nrtc_pjsip', 'CRD/sdk/ios/nrtc_sdk_ios')
     )
 
     # 브랜치 선택 추가
+    repo_url = f"{gitlab_url}/{project_path}.git"
+    branches = get_gitlab_branches(repo_url)
+   
+    default_branches = ['develop', 'master', 'release']
+    all_branches = default_branches + branches
     branch_selection = st.sidebar.selectbox(
         '브랜치를 선택하세요',
-        ('develop', 'master', 'release')
+        (all_branches)
     )
 
     # Commit Count(from HEAD to HEAD~n)
@@ -207,11 +282,15 @@ def main():
     if not openai_api_key:
         st.warning('API Key를 입력해주세요.')
         return
+    
+    if not gitlab_token:
+        st.warning('Gitlab Token을 입력해주세요.')
+        return
 
     client = OpenAI(api_key=openai_api_key)  # OpenAI 라이브러리 임포트
 
-    repo_path = "/Users/1111792/Documents/Source/torri/temp/" + repo_selection  # 여기에 로컬 저장소 경로를 입력하세요
-    diff = get_last_commit_diff(repo_path, branch_selection, commit_diff_count)
+    #repo_path = "/Users/1111792/Documents/Source/torri/temp/" + repo_selection  # 여기에 로컬 저장소 경로를 입력하세요
+    diff = get_last_commit_diff(gitlab_url, gitlab_token, project_path, branch_selection, commit_diff_count)
     if diff:
         summary = summarize_diff_by_file(diff, client)
         # if summary:
