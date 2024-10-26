@@ -2,3 +2,16 @@ streamlit
 matplotlib
 langchain
 openai
+streamlit
+langchain
+langchain_openai
+langchain_ollama
+langchain_community
+kiwipiepy
+langchain_huggingface
+pypdf
+faiss-cpu
+rank_bm25
+unstructured
+python-pptx
+docx2txt
